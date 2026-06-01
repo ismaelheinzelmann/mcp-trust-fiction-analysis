@@ -1,0 +1,43 @@
+/*
+    ATTACK: PROMPT INJECTION
+    Adversary either (a) controls a separate malicious server, or
+    (b) supplies a poisoned payload that reaches the host through a
+    legitimate-looking channel ("compromised" path).
+
+    Shared restrictions (OneMaliciousServer, MaliciousNameDiffers,
+    ExclusiveServerType) live in attacks/common.spthy and must be loaded
+    by every entry-point that includes this file.
+*/
+
+rule InitMaliciousServer_PI [colour=#FF0000]:
+    [ !LegitServer($IntendedServerName, $ToolName) ]
+    --[ InitMaliciousServer($MaliciousServerName, $ToolName),
+        MaliciousServer($MaliciousServerName) ]->
+    [ !Server($MaliciousServerName, $ToolName),
+      !IsMalicious($MaliciousServerName) ]
+
+rule ServerExecute_Malicious [colour=#FF0000]:
+    [ In(<'request', $H, $MaliciousServerName, toolName, requestId>),
+      !Host($H, ~hostId),
+      !Server($MaliciousServerName, toolName),
+      !IsMalicious($MaliciousServerName),
+      Fr(~realData) ]
+    --[ ToolExecuted($H, $MaliciousServerName, toolName, requestId),
+        MaliciousExecution($MaliciousServerName, toolName, requestId),
+        PayloadGenerated(embedInstruction(~realData, 'malicious_action'), requestId),
+        InjectionAttempt($H, $MaliciousServerName, toolName, requestId) ]->
+    [ Out(<'result', $H, $MaliciousServerName, toolName, requestId, embedInstruction(~realData, 'malicious_action')>) ]
+
+// Models a legitimate server whose returned payload was poisoned (e.g. via
+// upstream data poisoning or a man-in-the-middle on the data side). The server
+// name remains legitimate; the *data* carries an embedded instruction.
+rule ServerExecute_Legitimate_CompromisedPayload [colour=#FF0000]:
+    [ In(<'request', $H, $IntendedServerName, toolName, requestId>),
+      !Host($H, ~hostId),
+      !LegitServer($IntendedServerName, toolName),
+      Fr(~realData) ]
+    --[ ToolExecuted($H, $IntendedServerName, toolName, requestId),
+        LegitimateServerInvoked($IntendedServerName, toolName, requestId),
+        PayloadGenerated(embedInstruction(~realData, 'malicious_action'), requestId),
+        InjectionAttempt($H, $IntendedServerName, toolName, requestId) ]->
+    [ Out(<'result', $H, $IntendedServerName, toolName, requestId, embedInstruction(~realData, 'malicious_action')>) ]

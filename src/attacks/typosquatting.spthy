@@ -1,0 +1,16 @@
+/*
+    ATTACK: TYPOSQUATTING
+    Adversary registers a malicious server whose name is syntactically
+    distinct from (but easily confused with) the legitimate one.
+
+    Shared restrictions (OneMaliciousServer, MaliciousNameDiffers,
+    ExclusiveServerType) live in attacks/common.spthy and must be loaded
+    by every entry-point that includes this file.
+*/
+
+rule InitMaliciousServer_TS [colour=#FF0000]:
+    [ !LegitServer($IntendedServerName, $ToolName) ]
+    --[ InitMaliciousServer($TyposquattedServerName, $ToolName),
+        MaliciousServer($TyposquattedServerName) ]->
+    [ !Server($TyposquattedServerName, $ToolName),
+      !IsMalicious($TyposquattedServerName) ]

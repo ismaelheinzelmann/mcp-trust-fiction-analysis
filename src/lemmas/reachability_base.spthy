@@ -1,0 +1,9 @@
+/* LEMMAS: REACHABILITY BASE */
+lemma normal_flow_reachable:
+  exists-trace
+  "Ex host IntendedServerName toolName reqId #i.
+    TaskCompleted(host, toolName, reqId) @ #i
+    & NormalResultProcessed(host, IntendedServerName, toolName, reqId) @ #i
+    & (Ex #j. LegitimateServer(IntendedServerName) @ #j)
+    & (Ex #k. HonestExecution(IntendedServerName, toolName, reqId) @ #k)
+  "

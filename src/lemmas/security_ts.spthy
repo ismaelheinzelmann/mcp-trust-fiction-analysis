@@ -1,0 +1,52 @@
+/*
+    LEMMAS: SECURITY TYPOSQUATTING
+
+    `no_malicious_server_accepted` is the central operational lemma:
+      no host ever marks a malicious server as accepted.
+
+    `attentive_prevents_malicious_server` is a strictly stronger conditional:
+      if the attentive validation rule fires, the validated server is not
+      malicious. It is only meaningful in experiments where AttentiveValidation
+      is actually reachable. Use `attentive_validation_reachable_sanity` below
+      to discriminate vacuous vs. non-vacuous "verified" results.
+*/
+
+lemma no_malicious_server_accepted:
+  all-traces
+  "All host serverName sessionId #i.
+    ServerAccepted(host, serverName, sessionId) @ #i
+    ==> not(Ex #j. MaliciousServer(serverName) @ #j)
+  "
+
+lemma attentive_prevents_malicious_server:
+  all-traces
+  "All host TyposquattedServerName sessionId #i.
+    AttentiveValidation(host, TyposquattedServerName, sessionId) @ #i
+    ==> not(Ex #j. MaliciousServer(TyposquattedServerName) @ #j)
+  "
+
+/* ──────────────── Sanity exists-trace witnesses ──────────────── */
+
+// Witnesses that the antecedent of `no_malicious_server_accepted` is reachable.
+// EXPECTED: verified in every experiment (every mask reaches ServerAccepted
+// at least for the legitimate server). If FALSIFIED, the discovery flow is
+// broken and the whole experiment is meaningless.
+lemma server_acceptance_reachable_sanity:
+  exists-trace
+  "Ex host serverName sessionId #i.
+    ServerAccepted(host, serverName, sessionId) @ #i
+  "
+
+// Witnesses that the antecedent of `attentive_prevents_malicious_server`
+// is reachable.
+// EXPECTED: verified ONLY in experiments where the attentive mask (or the
+// registry-verification fallback, which also emits AttentiveValidation) is
+// active — i.e. Phase 1 attentive and every Phase 2 experiment. FALSIFIED
+// in Phase 1 busy and Phase 1 careless: the "verified" result for
+// attentive_prevents_malicious_server in those experiments is therefore
+// vacuous and must be reported as such.
+lemma attentive_validation_reachable_sanity:
+  exists-trace
+  "Ex host serverName sessionId #i.
+    AttentiveValidation(host, serverName, sessionId) @ #i
+  "

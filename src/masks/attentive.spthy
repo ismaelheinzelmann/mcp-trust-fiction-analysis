@@ -1,0 +1,62 @@
+/*
+    PIRANDELLIAN MASK: ATTENTIVE
+    Validates server identity during discovery and scrutinises LLM actions.
+    Rejects typosquatted servers and rejects injected actions.
+
+    Modeling note (UserAttentive_Reject):
+      The attentive user rejects EVERY PendingUserDecision unconditionally.
+      This is intentional: PendingUserDecision is only ever produced by
+      LLM_ProcessResult_WithInjection (i.e. when the LLM extracted an
+      embedded instruction from the tool output). Under the data-provenance
+      framing, *any* action the LLM proposes from external data is, by
+      definition, untrusted — so a fully-attentive user rejects categorically.
+      Modeling "attentive accepts legitimate proposed actions" is out of
+      scope (the LLM in this model never proposes benign actions that
+      require human confirmation).
+*/
+
+/* ────────────────────────────────────────────────────────────────
+   Discovery-phase validation
+   ──────────────────────────────────────────────────────────────── */
+
+// Accept: server name matches AND tool name matches (unified via shared variable).
+rule HostAttentive_Accept [colour=#1976D2]:
+    [ PendingValidation($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, toolName) ]
+    --[ MaskApplied('Attentive'),
+        Eq($ServerName, $IntendedServerName),
+        AttentiveValidation($H, $ServerName, ~sessionId),
+        ServerAccepted($H, $ServerName, ~sessionId) ]->
+    [ TrustedSession($H, $ServerName, toolName, ~sessionId) ]
+
+// Reject: server name differs (tool name unified by shared variable).
+rule HostAttentive_Reject [colour=#1976D2]:
+    [ PendingValidation($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, toolName) ]
+    --[ MaskApplied('Attentive'),
+        Neq($ServerName, $IntendedServerName),
+        AttentiveRejection($H, $ServerName, ~sessionId),
+        ServerRejected($H, $ServerName, ~sessionId) ]->
+    [ ]
+
+// Reject: tool name differs from the intended tool (covers the case where
+// an adversary responds to discovery with a different tool name).
+rule HostAttentive_Reject_ToolMismatch [colour=#1976D2]:
+    [ PendingValidation($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, intendedTool) ]
+    --[ MaskApplied('Attentive'),
+        Neq(toolName, intendedTool),
+        AttentiveRejection($H, $ServerName, ~sessionId),
+        ServerRejected($H, $ServerName, ~sessionId) ]->
+    [ ]
+
+/* ────────────────────────────────────────────────────────────────
+   LLM-output validation
+   ──────────────────────────────────────────────────────────────── */
+
+rule UserAttentive_Reject [colour=#1976D2]:
+    [ PendingUserDecision($H, $ServerName, toolName, requestId, injectedAction) ]
+    --[ MaskApplied('Attentive'),
+        AttentiveReview($H, injectedAction, requestId),
+        UserRejects($H, injectedAction, requestId) ]->
+    [ ]

@@ -1,0 +1,14 @@
+theory typosquatting_phase2_attentive
+begin
+
+#include "../core/base.spthy"
+#include "../attacks/common.spthy"
+#include "../attacks/typosquatting.spthy"
+#include "../mitigations/registry_verification.spthy"
+#include "../masks/attentive.spthy"
+
+#include "../lemmas/reachability_base.spthy"
+#include "../lemmas/reachability_ts.spthy"
+#include "../lemmas/security_ts.spthy"
+
+end

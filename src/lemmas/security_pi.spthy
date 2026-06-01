@@ -1,0 +1,60 @@
+/*
+    LEMMAS: SECURITY PROMPT INJECTION
+
+    Naming convention:
+      * `no_injected_action_executed` — global safety: no rule ever emits
+        `InjectedActionExecuted`. In Phase 1 attentive it holds vacuously
+        (attentive has no UserAccepts rule); in Phase 1 busy/careless it
+        is falsified; in Phase 2 it holds because friction interposes.
+
+      * `friction_prevents_injection_executed` — operational safety:
+        whenever the friction layer flags an action as data-derived
+        (DerivedActionDetected), that same action cannot also be executed.
+        Non-trivial: the proof relies on the linear PendingUserDecision
+        fact being consumable only once (so Friction_Intercept and
+        UserBusy_Accept / UserCareless_Accept cannot both fire for the
+        same reqId).
+
+    Sanity exists-trace lemmas follow the all-traces
+    lemmas. They prove that the *antecedents* of the safety lemmas are
+    reachable in the given experiment. If a sanity lemma is FALSIFIED,
+    the corresponding all-traces lemma above it is vacuously true and
+    should be reported as such in the TCC.
+*/
+
+lemma no_injected_action_executed:
+  all-traces
+  "All VictimHost injectedAction reqId #i.
+    InjectedActionExecuted(VictimHost, injectedAction, reqId) @ #i
+    ==> F
+  "
+
+lemma friction_prevents_injection_executed:
+  all-traces
+  "All host injectedAction reqId #i.
+    DerivedActionDetected(host, injectedAction, reqId) @ #i
+    ==> not(Ex #j. InjectedActionExecuted(host, injectedAction, reqId) @ #j)
+  "
+
+/* ──────────────── Sanity exists-trace witnesses ──────────────── */
+
+// Witnesses that the security lemma above is non-vacuous in this
+// experiment: an InjectedActionExecuted event is reachable.
+// EXPECTED: verified in Phase 1 busy/careless; FALSIFIED in Phase 1
+// attentive and in every Phase 2 experiment (proving that the
+// no_injected_action_executed result is meaningful in busy/careless
+// Phase 1 and vacuous elsewhere — see Cap. 3 results table).
+lemma injected_action_executable_sanity:
+  exists-trace
+  "Ex VictimHost injectedAction reqId #i.
+    InjectedActionExecuted(VictimHost, injectedAction, reqId) @ #i
+  "
+
+// Witnesses that friction actually engages in this experiment.
+// EXPECTED: verified in every Phase 2 experiment (with friction);
+// FALSIFIED in every Phase 1 experiment.
+lemma friction_engages_sanity:
+  exists-trace
+  "Ex host injectedAction reqId #i.
+    DerivedActionDetected(host, injectedAction, reqId) @ #i
+  "

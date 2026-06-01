@@ -1,0 +1,14 @@
+/*
+    CORE SERVER DISCOVERY
+    Phase 1 only. Simple validation without registry friction.
+*/
+
+rule HostReceiveDiscovery:
+    [ AwaitingDiscovery($H, ~hostId, ~discoveryId),
+      DiscoveryInProgress($H, ~discoveryId),
+      In(<'discovery_response', $H, serverName, toolName, ~discoveryId>),
+      Fr(~sessionId) ]
+    --[ HostDiscovered($H, serverName, toolName, ~sessionId),
+        DiscoveryCompleted($H, ~discoveryId) ]->
+    [ PendingValidation($H, ~hostId, serverName, toolName, ~sessionId) ]
+

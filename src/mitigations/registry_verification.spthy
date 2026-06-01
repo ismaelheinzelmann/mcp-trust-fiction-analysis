@@ -1,0 +1,78 @@
+/*
+    MITIGATION: SERVER REGISTRY
+    Phase 2 Typosquatting defense. Adds a registry allowlist for discovery.
+    After friction, all masks validate with attentive behavior (name + tool check).
+
+    Note: ExclusiveServerType lives in attacks/common.spthy (shared across
+    all attack/mitigation modules).
+*/
+
+rule RegisterServer:
+    [ !Host($H, ~hostId),
+      !LegitServer($ServerName, toolName) ]
+    --[ ServerRegistered($H, $ServerName) ]->
+    [ !ServerRegistry($H, $ServerName) ]
+
+restriction OnlyLegitimateRegistered:
+  "All H serverName #i.
+    ServerRegistered(H, serverName) @ #i
+    ==> (Ex #j. LegitimateServer(serverName) @ #j)"
+
+restriction RegistryExclusive:
+  "All H serverName sessionId #i.
+    UnregisteredServerDetected(H, serverName, sessionId) @ #i
+    ==> not(Ex #j. ServerRegistered(H, serverName) @ #j)"
+
+rule HostReceiveDiscovery_Registered [colour=#00AA00]:
+    [ AwaitingDiscovery($H, ~hostId, ~discoveryId),
+      DiscoveryInProgress($H, ~discoveryId),
+      In(<'discovery_response', $H, serverName, toolName, ~discoveryId>),
+      !ServerRegistry($H, serverName),
+      Fr(~sessionId) ]
+    --[ HostDiscovered($H, serverName, toolName, ~sessionId),
+        DiscoveryCompleted($H, ~discoveryId),
+        RegisteredServerFound($H, serverName, ~sessionId) ]->
+    [ PendingValidation($H, ~hostId, serverName, toolName, ~sessionId) ]
+
+rule HostReceiveDiscovery_Unregistered [colour=#FF6600]:
+    [ AwaitingDiscovery($H, ~hostId, ~discoveryId),
+      DiscoveryInProgress($H, ~discoveryId),
+      In(<'discovery_response', $H, serverName, toolName, ~discoveryId>),
+      Fr(~sessionId) ]
+    --[ HostDiscovered($H, serverName, toolName, ~sessionId),
+        DiscoveryCompleted($H, ~discoveryId),
+        UnregisteredServerDetected($H, serverName, ~sessionId) ]->
+    [ FrictionState($H, ~hostId, serverName, toolName, ~sessionId) ]
+
+// After friction: all masks validate with attentive behavior (name + tool).
+// Accept if name and tool both match the intended server.
+rule FrictionValidate_Accept [colour=#4488CC]:
+    [ FrictionState($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, toolName) ]
+    --[ FrictionApplied($H, 'AttentiveValidation'),
+        MaskApplied('Attentive'),
+        Eq($ServerName, $IntendedServerName),
+        AttentiveValidation($H, $ServerName, ~sessionId),
+        ServerAccepted($H, $ServerName, ~sessionId) ]->
+    [ TrustedSession($H, $ServerName, toolName, ~sessionId) ]
+
+// Reject if server name does not match intended (tool name matches via unification).
+rule FrictionValidate_Reject [colour=#4488CC]:
+    [ FrictionState($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, toolName) ]
+    --[ FrictionApplied($H, 'AttentiveValidation'),
+        MaskApplied('Attentive'),
+        Neq($ServerName, $IntendedServerName),
+        AttentiveRejection($H, $ServerName, ~sessionId),
+        ServerRejected($H, $ServerName, ~sessionId) ]->
+    [ ]
+
+// Reject if tool name does not match intended.
+rule FrictionValidate_Reject_ToolMismatch [colour=#4488CC]:
+    [ FrictionState($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, intendedTool) ]
+    --[ FrictionApplied($H, 'AttentiveValidation'),
+        MaskApplied('Attentive'),
+        Neq(toolName, intendedTool),
+        ServerRejected($H, $ServerName, ~sessionId) ]->
+    [ ]

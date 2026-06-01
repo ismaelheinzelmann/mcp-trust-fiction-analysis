@@ -1,0 +1,37 @@
+/*
+    COMMON ATTACK RESTRICTIONS
+    Shared by all attack models (Typosquatting, Prompt Injection, and unified theories).
+
+    Rationale (Cap. 3 — abstractions):
+      * `OneMaliciousServer`: limits the analysis to a single adversary-controlled
+        server per trace. Together with `OneLegitimateServer` in base.spthy, this
+        keeps state-space exploration finite and tractable, at an explicit
+        cost to generality.
+      * `MaliciousNameDiffers`: enforces that the malicious server name is
+        syntactically distinct from the legitimate one — a definitional
+        requirement of any impersonation attack (typosquatting or look-alike).
+      * `ExclusiveServerType`: a server cannot be simultaneously legitimate and
+        malicious. Strictly stronger than `MaliciousNameDiffers` (also covers
+        symbol reuse beyond name equality).
+
+    These restrictions must be loaded exactly once per theory, regardless of how
+    many attack modules are combined.
+*/
+
+restriction OneMaliciousServer:
+  "All n1 n2 #i #j.
+    MaliciousServer(n1) @ #i
+    & MaliciousServer(n2) @ #j
+    ==> #i = #j"
+
+restriction MaliciousNameDiffers:
+  "All MaliciousName attackerTool LegitName legitTool #i #j.
+    InitMaliciousServer(MaliciousName, attackerTool) @ #i
+    & InitServer(LegitName, legitTool) @ #j
+    ==> not(MaliciousName = LegitName)"
+
+restriction ExclusiveServerType:
+  "All name #i #j.
+    LegitimateServer(name) @ #i
+    & MaliciousServer(name) @ #j
+    ==> F"

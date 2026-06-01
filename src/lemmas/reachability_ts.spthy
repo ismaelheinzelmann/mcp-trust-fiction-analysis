@@ -1,0 +1,28 @@
+/* LEMMAS: REACHABILITY TYPOSQUATTING */
+lemma malicious_discovery_reachable:
+  exists-trace
+  "Ex host TyposquattedServerName sessionId toolName IntendedServerName discId #i #j #k #r.
+    ServerAccepted(host, TyposquattedServerName, sessionId) @ #i
+    & HostFormedToolIntent(host, IntendedServerName, toolName) @ #k
+    & InitMaliciousServer(TyposquattedServerName, toolName) @ #j
+    & ServerResponded(TyposquattedServerName, discId) @ #r
+  "
+
+lemma discovery_rejected:
+  exists-trace
+  "Ex host TyposquattedServerName sessionId toolName IntendedServerName discId #i #j #k #r.
+    AttentiveRejection(host, TyposquattedServerName, sessionId) @ #i
+    & HostFormedToolIntent(host, IntendedServerName, toolName) @ #k
+    & InitMaliciousServer(TyposquattedServerName, toolName) @ #j
+    & ServerResponded(TyposquattedServerName, discId) @ #r
+  "
+
+lemma mitigated_discovery_rejected:
+  exists-trace
+  "Ex host TyposquattedServerName sessionId toolName IntendedServerName discId #i #j #k #r #d.
+    ServerRejected(host, TyposquattedServerName, sessionId) @ #i
+    & HostFormedToolIntent(host, IntendedServerName, toolName) @ #k
+    & InitMaliciousServer(TyposquattedServerName, toolName) @ #j
+    & ServerResponded(TyposquattedServerName, discId) @ #r
+    & HostDiscovered(host, TyposquattedServerName, toolName, sessionId) @ #d
+  "

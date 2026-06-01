@@ -1,0 +1,52 @@
+/*
+    MITIGATION: CONTEXTUAL FRICTION (Phase 2 — Prompt Injection defense)
+
+    Design:
+      Interception and rejection are split into TWO rules connected by a
+      linear fact `InterceptedAction`. This avoids the tautological-lemma
+      problem of the previous monolithic rule, where DerivedActionDetected
+      and UserRejects co-occurred by construction.
+
+      `Friction_Intercept`: consumes PendingUserDecision, emits
+        DerivedActionDetected, and produces the linear `InterceptedAction`
+        state. This corresponds to the system flagging the proposed action
+        as data-derived (Designation / Data Provenance layer).
+
+      `Friction_Reject`: consumes InterceptedAction, emits UserRejects.
+        Corresponds to the user actually dismissing the proposed action
+        (Friction / Admonishment layer).
+
+      Because the two rules are separated by a linear state, the user
+      *could* in principle remain in the intercepted state without
+      finalising the rejection — but, crucially, this cannot lead to
+      execution of the injected action (the linear PendingUserDecision is
+      already consumed). Operational safety is captured by the lemma
+      `friction_prevents_injection_executed` in lemmas/security_pi.spthy.
+
+      The `FrictionMustIntercept` restriction continues to force every
+      ProposedAction through the interception rule, blocking
+      busy/careless masks from consuming PendingUserDecision directly.
+*/
+
+rule Friction_Intercept [colour=#4488CC]:
+    [ PendingUserDecision($H, $ServerName, toolName, requestId, injectedAction) ]
+    --[ FrictionApplied($H, 'Intercept'),
+        DerivedActionDetected($H, injectedAction, requestId) ]->
+    [ InterceptedAction($H, $ServerName, toolName, requestId, injectedAction) ]
+
+rule Friction_Reject [colour=#4488CC]:
+    [ InterceptedAction($H, $ServerName, toolName, requestId, injectedAction) ]
+    --[ FrictionApplied($H, 'Reject'),
+        MaskApplied('Attentive'),
+        AttentiveReview($H, injectedAction, requestId),
+        UserRejects($H, injectedAction, requestId) ]->
+    [ ]
+
+// Forces every proposed action through the interception rule. Without this,
+// busy/careless masks could consume PendingUserDecision directly and bypass
+// friction. With this, the only way to satisfy ProposedAction is to also
+// have DerivedActionDetected — emitted only by Friction_Intercept.
+restriction FrictionMustIntercept:
+  "All H action reqId #i.
+    ProposedAction(H, action, reqId) @ #i
+    ==> (Ex #j. DerivedActionDetected(H, action, reqId) @ #j)"

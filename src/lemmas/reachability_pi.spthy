@@ -1,0 +1,30 @@
+/* LEMMAS: REACHABILITY PROMPT INJECTION */
+lemma injection_from_malicious_server_reachable:
+  exists-trace
+  "Ex VictimHost injectedAction reqId MaliciousServerName InjectedToolName #i #j.
+    ProposedAction(VictimHost, injectedAction, reqId) @ #i
+    & InjectionAttempt(VictimHost, MaliciousServerName, InjectedToolName, reqId) @ #j
+    & MaliciousExecution(MaliciousServerName, InjectedToolName, reqId) @ #j
+  "
+
+lemma injection_rejected:
+  exists-trace
+  "Ex VictimHost injectedAction reqId MaliciousServerName InjectedToolName #i #j.
+    UserRejects(VictimHost, injectedAction, reqId) @ #i
+    & InjectionAttempt(VictimHost, MaliciousServerName, InjectedToolName, reqId) @ #j
+  "
+
+lemma injection_accepted:
+  exists-trace
+  "Ex VictimHost injectedAction reqId MaliciousServerName InjectedToolName #i #j.
+    UserAccepts(VictimHost, injectedAction, reqId) @ #i
+    & InjectionAttempt(VictimHost, MaliciousServerName, InjectedToolName, reqId) @ #j
+  "
+
+lemma injection_from_legitimate_server_reachable:
+  exists-trace
+  "Ex VictimHost injectedAction reqId IntendedServerName InjectedToolName #i #j.
+    ProposedAction(VictimHost, injectedAction, reqId) @ #i
+    & InjectionAttempt(VictimHost, IntendedServerName, InjectedToolName, reqId) @ #j
+    & LegitimateServerInvoked(IntendedServerName, InjectedToolName, reqId) @ #j
+  "

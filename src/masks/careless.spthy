@@ -1,0 +1,22 @@
+/*
+    PIRANDELLIAN MASK: CARELESS
+    Blindly accepts all discovery results and all LLM actions.
+    The most vulnerable mask.
+*/
+
+// Discovery Phase Validation
+rule HostCareless_Accept [colour=#1976D2]:
+    [ PendingValidation($H, ~hostId, $ServerName, toolName, ~sessionId) ]
+    --[ MaskApplied('Careless'),
+        CarelessValidation($H, $ServerName, ~sessionId),
+        ServerAccepted($H, $ServerName, ~sessionId) ]->
+    [ TrustedSession($H, $ServerName, toolName, ~sessionId) ]
+
+// LLM Execution Phase Validation
+rule UserCareless_Accept [colour=#FF0000]:
+    [ PendingUserDecision($H, $ServerName, toolName, requestId, injectedAction) ]
+    --[ MaskApplied('Careless'),
+        CarelessReview($H, injectedAction, requestId),
+        UserAccepts($H, injectedAction, requestId),
+        InjectedActionExecuted($H, injectedAction, requestId) ]->
+    [ ]

@@ -1,0 +1,43 @@
+/*
+    PIRANDELLIAN MASK: BUSY
+    Validates tool name during discovery (not server name).
+    On proposed actions: validates tool context only (not server name, not action content).
+*/
+
+// Discovery Phase Validation — validates tool name, ignores server name
+rule HostBusy_Accept [colour=#1976D2]:
+    [ PendingValidation($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, toolName) ]
+    --[ MaskApplied('Busy'),
+        BusyValidation($H, $ServerName, ~sessionId),
+        ServerAccepted($H, $ServerName, ~sessionId) ]->
+    [ TrustedSession($H, $ServerName, toolName, ~sessionId) ]
+
+rule HostBusy_Reject [colour=#1976D2]:
+    [ PendingValidation($H, ~hostId, $ServerName, toolName, ~sessionId),
+      !HostToolIntent($H, $IntendedServerName, intendedTool) ]
+    --[ MaskApplied('Busy'),
+        Neq(toolName, intendedTool),
+        BusyRejection($H, $ServerName, ~sessionId),
+        ServerRejected($H, $ServerName, ~sessionId) ]->
+    [ ]
+
+// LLM Execution Phase Validation — validates tool context, ignores server name and action content
+rule UserBusy_Accept [colour=#7B1FA2]:
+    [ PendingUserDecision($H, $ServerName, toolName, requestId, injectedAction),
+      !HostToolIntent($H, $IntendedServerName, toolName) ]
+    --[ MaskApplied('Busy'),
+        BusyAcceptance($H, injectedAction, requestId),
+        UserAccepts($H, injectedAction, requestId),
+        InjectedActionExecuted($H, injectedAction, requestId) ]->
+    [ ]
+
+// Rejects only when the proposed action comes from the wrong tool context
+rule UserBusy_Reject [colour=#1976D2]:
+    [ PendingUserDecision($H, $ServerName, toolName, requestId, injectedAction),
+      !HostToolIntent($H, $IntendedServerName, intendedTool) ]
+    --[ MaskApplied('Busy'),
+        Neq(toolName, intendedTool),
+        BusyReview($H, injectedAction, requestId),
+        UserRejects($H, injectedAction, requestId) ]->
+    [ ]

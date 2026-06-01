@@ -1,0 +1,195 @@
+/*
+    CORE MCP EXECUTION LIFECYCLE
+    Universal foundational logic for all experiments.
+
+    ─────────────────────────────────────────────────────────────────────
+    Modeling abstractions (acknowledge these in Cap. 3 of the TCC):
+
+      1. Single-instance restrictions (OneHost, OneLegitimateServer,
+         OneHostIntent, OneDiscovery): the analysis is performed in a
+         minimal (1-host, 1-legit-server, 1-malicious-server) scenario.
+         By symmetry of the rules this is sufficient to expose the
+         human-factor vulnerabilities under study, but it does NOT cover
+         cross-server shadowing or multi-session attacks.
+
+      2. `embedInstruction` is declared [private]. The Dolev-Yao adversary
+         can therefore observe and forward embedded-instruction terms but
+         cannot synthesize new ones. This abstracts "semantic injection"
+         (instructions hidden inside data legitimately produced by a tool)
+         away from "protocol-message forgery". The OnlyExtractFromEmbedded
+         restriction additionally guarantees that ContainsEmbeddedInstruction
+         only fires on well-formed embedInstruction terms. Together these
+         supersede the previous NoSplicing restriction (now removed).
+
+      3. The LLM is split into two consumption rules
+         (LLM_ProcessResult_Normal vs LLM_ProcessResult_WithInjection)
+         that share the same premise pattern. Tamarin explores both,
+         modeling the LLM as non-deterministic in how it treats the
+         server's payload.
+    ─────────────────────────────────────────────────────────────────────
+*/
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @i ==> x = y"
+
+restriction Inequality:
+  "All x #i. Neq(x,x) @i ==> F"
+
+// embedInstruction is [private]: the adversary cannot synthesize new
+// embedInstruction terms (only observe / forward those produced by rules).
+// This is the formal expression of "the adversary cannot fabricate
+// well-formed tool payloads out of thin air" — necessary to model semantic
+// injection without conflating it with arbitrary protocol forgery.
+functions: embedInstruction/2 [private], extractInstruction/1
+
+equations:
+    extractInstruction(embedInstruction(data, instruction)) = instruction
+
+/* ══════════════════════════════════════════════════════════════
+   INITIALIZATION
+   ══════════════════════════════════════════════════════════════ */
+
+rule InitHost [colour=#555555]:
+    [ Fr(~hostId) ]
+    --[ InitHost($H, ~hostId) ]->
+    [ !Host($H, ~hostId) ]
+
+restriction OneHost:
+  "All H1 id1 H2 id2 #i #j.
+    InitHost(H1, id1) @ #i
+    & InitHost(H2, id2) @ #j
+    ==> #i = #j"
+
+rule InitLegitimateServer [colour=#00AA00]:
+    [ ]
+    --[ InitServer($IntendedServerName, $ToolName),
+        LegitimateServer($IntendedServerName) ]->
+    [ !LegitServer($IntendedServerName, $ToolName),
+      !Server($IntendedServerName, $ToolName) ]
+
+restriction OneLegitimateServer:
+  "All n1 n2 #i #j.
+    LegitimateServer(n1) @ #i
+    & LegitimateServer(n2) @ #j
+    ==> #i = #j"
+
+rule HostFormToolIntent:
+    [ !Host($H, ~hostId),
+      !LegitServer($IntendedServerName, toolName) ]
+    --[ HostFormedToolIntent($H, $IntendedServerName, toolName) ]->
+    [ !HostToolIntent($H, $IntendedServerName, toolName) ]
+
+restriction ToolIntentIsForLegitimate:
+  "All H serverName toolName #i.
+    HostFormedToolIntent(H, serverName, toolName) @ #i
+    ==> (Ex #j. LegitimateServer(serverName) @ #j)"
+
+restriction OneHostIntent:
+  "All H1 s1 t1 H2 s2 t2 #i #j.
+    HostFormedToolIntent(H1, s1, t1) @ #i
+    & HostFormedToolIntent(H2, s2, t2) @ #j
+    ==> #i = #j"
+
+restriction OneDiscovery:
+  "All H id1 id2 #i #j.
+    DiscoveryRequested(H, id1) @ #i
+    & DiscoveryRequested(H, id2) @ #j
+    ==> #i = #j"
+
+restriction DiscoveryResponseMatchesRequest:
+  "All serverName discId #i.
+    ServerResponded(serverName, discId) @ #i
+    ==> (Ex H #j. DiscoveryRequested(H, discId) @ #j & #j < #i)"
+
+/* ══════════════════════════════════════════════════════════════
+   SERVER DISCOVERY (Request/Response)
+   ══════════════════════════════════════════════════════════════ */
+
+rule HostDiscoveryRequest:
+    [ !Host($H, ~hostId),
+      !HostToolIntent($H, $IntendedServerName, toolName),
+      Fr(~discoveryId) ]
+    --[ DiscoveryRequested($H, ~discoveryId) ]->
+    [ Out(<'discover', $H, ~discoveryId>),
+      AwaitingDiscovery($H, ~hostId, ~discoveryId),
+      DiscoveryInProgress($H, ~discoveryId) ]
+
+rule ServerRespondToDiscovery:
+    [ In(<'discover', $H, ~discoveryId>),
+      !Host($H, ~hostId),
+      !Server($ServerName, toolName) ]
+    --[ ServerResponded($ServerName, ~discoveryId) ]->
+    [ Out(<'discovery_response', $H, $ServerName, toolName, ~discoveryId>) ]
+
+/*
+   Note: The actual processing of the discovery response (HostReceiveDiscovery)
+   is deferred to core/discovery.spthy (Phase 1) or mitigations/registry.spthy (Phase 2),
+   both of which produce PendingValidation.
+*/
+
+/* ══════════════════════════════════════════════════════════════
+   TOOL INVOCATION & EXECUTION
+   ══════════════════════════════════════════════════════════════ */
+
+rule HostInvokeTool:
+    [ TrustedSession($H, $ServerName, toolName, ~sessionId),
+      Fr(~requestId) ]
+    --[ ToolInvoked($H, $ServerName, toolName, ~requestId),
+        UserOriginalIntent($H, toolName, ~requestId) ]->
+    [ Out(<'request', $H, $ServerName, toolName, ~requestId>),
+      AwaitingResult($H, $ServerName, toolName, ~requestId) ]
+
+rule ServerExecute_Honest [colour=#00AA00]:
+    [ In(<'request', $H, $ServerName, toolName, requestId>),
+      !Host($H, ~hostId),
+      !LegitServer($ServerName, toolName),
+      Fr(~genuineData) ]
+    --[ ToolExecuted($H, $ServerName, toolName, requestId),
+        HonestExecution($ServerName, toolName, requestId) ]->
+    [ Out(<'result', $H, $ServerName, toolName, requestId, ~genuineData>) ]
+
+restriction SingleExecution:
+  "All H server tool reqId #i #j.
+    ToolExecuted(H, server, tool, reqId) @ #i
+    & ToolExecuted(H, server, tool, reqId) @ #j
+    ==> #i = #j"
+
+// Servers only execute tool calls the host actually initiated (same host,
+// server name, tool, and request id). Prevents the adversary from injecting
+// orphan <'request', ...> messages (e.g. with a learned requestId.1).
+restriction ServerExecutesHostRequest:
+  "All H server tool reqId #i.
+    ToolExecuted(H, server, tool, reqId) @ #i
+    ==> (Ex #j. ToolInvoked(H, server, tool, reqId) @ #j & #j < #i)"
+
+
+/* ══════════════════════════════════════════════════════════════
+   LLM PROCESSING
+   ══════════════════════════════════════════════════════════════ */
+
+rule LLM_ProcessResult_Normal [colour=#00AA00]:
+    [ AwaitingResult($H, $ServerName, toolName, requestId),
+      In(<'result', $H, $ServerName, toolName, requestId, result>) ]
+    --[ NormalResultProcessed($H, $ServerName, toolName, requestId),
+        ResultDelivered($H, $ServerName, toolName, requestId, 'genuine'),
+        TaskCompleted($H, toolName, requestId) ]->
+    [ FlowCompleted($H, toolName, requestId) ]
+
+rule LLM_ProcessResult_WithInjection [colour=#FF6600]:
+    [ AwaitingResult($H, $ServerName, toolName, requestId),
+      In(<'result', $H, $ServerName, toolName, requestId, result>) ]
+    --[ LLMExtractedInjection($H, $ServerName, extractInstruction(result)),
+        ProposedAction($H, extractInstruction(result), requestId),
+        ContainsEmbeddedInstruction(result),
+        ResultDelivered($H, $ServerName, toolName, requestId, 'poisoned') ]->
+    [ PendingUserDecision($H, $ServerName, toolName, requestId, extractInstruction(result)) ]
+
+// Forces well-formedness: ContainsEmbeddedInstruction only fires on terms
+// of shape embedInstruction(_, _). Combined with embedInstruction being
+// [private], this guarantees that "poisoned" extractions correspond to
+// payloads actually generated by a server (honest-malicious or compromised-
+// legitimate), and not adversarial fabrications.
+restriction OnlyExtractFromEmbedded:
+  "All result #i.
+    ContainsEmbeddedInstruction(result) @ #i
+    ==> (Ex data action. result = embedInstruction(data, action))"

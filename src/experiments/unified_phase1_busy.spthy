@@ -1,0 +1,17 @@
+theory unified_phase1_busy
+begin
+
+#include "../core/base.spthy"
+#include "../core/discovery.spthy"
+#include "../attacks/common.spthy"
+#include "../attacks/prompt_injection.spthy"
+#include "../attacks/typosquatting.spthy"
+#include "../masks/busy.spthy"
+
+#include "../lemmas/reachability_base.spthy"
+#include "../lemmas/reachability_ts.spthy"
+#include "../lemmas/reachability_pi.spthy"
+#include "../lemmas/security_ts.spthy"
+#include "../lemmas/security_pi.spthy"
+
+end

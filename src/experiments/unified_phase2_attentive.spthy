@@ -1,0 +1,18 @@
+theory unified_phase2_attentive
+begin
+
+#include "../core/base.spthy"
+#include "../attacks/common.spthy"
+#include "../attacks/prompt_injection.spthy"
+#include "../attacks/typosquatting.spthy"
+#include "../mitigations/registry_verification.spthy"
+#include "../mitigations/contextual_friction.spthy"
+#include "../masks/attentive.spthy"
+
+#include "../lemmas/reachability_base.spthy"
+#include "../lemmas/reachability_ts.spthy"
+#include "../lemmas/reachability_pi.spthy"
+#include "../lemmas/security_ts.spthy"
+#include "../lemmas/security_pi.spthy"
+
+end
